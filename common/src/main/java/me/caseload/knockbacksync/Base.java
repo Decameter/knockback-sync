@@ -10,6 +10,7 @@ import me.caseload.knockbacksync.command.subcommand.ReloadCommand;
 import me.caseload.knockbacksync.command.subcommand.StatusCommand;
 import me.caseload.knockbacksync.command.subcommand.ToggleCommand;
 import me.caseload.knockbacksync.command.subcommand.ToggleOffGroundSubcommand;
+import me.caseload.knockbacksync.config.YamlConfiguration;
 import me.caseload.knockbacksync.event.Event;
 import me.caseload.knockbacksync.event.EventBus;
 import me.caseload.knockbacksync.event.OptimizedEventBus;
@@ -18,22 +19,18 @@ import me.caseload.knockbacksync.manager.ConfigManager;
 import me.caseload.knockbacksync.permission.PermissionChecker;
 import me.caseload.knockbacksync.scheduler.SchedulerAdapter;
 import me.caseload.knockbacksync.sender.Sender;
-import me.caseload.knockbacksync.stats.custom.ClientBrandsPie;
 import me.caseload.knockbacksync.stats.custom.PluginJarHashProvider;
 import me.caseload.knockbacksync.stats.custom.StatsManager;
 import me.caseload.knockbacksync.world.PlatformServer;
 import org.incendo.cloud.CommandManager;
+import org.jetbrains.annotations.Nullable;
 import org.kohsuke.github.GitHub;
 
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
+import java.io.*;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.net.URLDecoder;
-import java.nio.file.Paths;
 import java.util.*;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 // Base class
@@ -60,6 +57,7 @@ public abstract class Base {
 
     private Platform detectPlatform() {
         final Map<String, Platform> platforms = Collections.unmodifiableMap(new HashMap<String, Platform>() {{
+            put("com.universeprojects.config.UniverseConfig", detectUniversePlatform()); // Detect the required platform for asynchronous world ticking correctly
             put("io.papermc.paper.threadedregions.RegionizedServer", Platform.FOLIA);
             put("org.bukkit.Bukkit", Platform.BUKKIT);
             put("net.fabricmc.loader.api.FabricLoader", Platform.FABRIC);
@@ -70,6 +68,27 @@ public abstract class Base {
                 .map(Map.Entry::getValue)
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("Unknown platform!"));
+    }
+
+    private Platform detectUniversePlatform() {
+        final File universeConfig = new File("universespigot.yml");
+        if (!universeConfig.exists()) {
+            return Platform.BUKKIT;
+        }
+
+        final YamlConfiguration yaml = new YamlConfiguration(universeConfig);
+        final ConfigWrapper wrapper;
+        try {
+            yaml.load();
+            wrapper = new ConfigWrapper(yaml.getData());
+        } catch (IOException e) {
+            e.printStackTrace();
+            return Platform.BUKKIT;
+        }
+
+        final boolean isParallelWorldTicking
+                = wrapper.getBoolean("asynchronous.world-ticking.enabled", false);
+        return isParallelWorldTicking ? Platform.FOLIA : Platform.BUKKIT;
     }
 
     private boolean isClassPresent(String className) {
